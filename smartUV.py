@@ -1,8 +1,13 @@
 """ Main class for top level control.  
 """
 # Note:
-#   All GPIO pins will follow BCM (Broadcom) convention instead of board convention. 
-
+#   1.   All GPIO pins will follow BCM (Broadcom) convention instead of board convention. 
+#   2.  We need confirmState because we need to notify the pyUI when the disinfection is completed.
+#   3. Implementation details to check with Chris 
+#       - check1 : return value of wifiCommunicator.getState() [list or 1/0 ]?
+#       - check2:  usage of checkwifi and start_connections, attemptReconnection
+#       - Do I have to touch lightModuleClient??
+#----------------------------------------------------------------------------     
 # Status:   in progress.
 # Last edit: Jordan Hong, 16:00 August 17, 2020 
 
@@ -65,13 +70,13 @@ class smartUV:
     #GPIO_DIST2      = 32
 
 
-    def __init__(self):
+    initialStateList = [["OFF", "lightName", 0]]
 
-        # Initialize utility classes with respective GPIO pins
-        self.distanceSensor = Ultrasonic(GPIO_DIST0, GPIO_DIST1, GPIO_DIST2)
-        self.motionSensor   = PIR(GPIO_PIR0, GPIO_PIR1, GPIO_PIR2)
-        self.timer          = Timer()
-        self.commander      = Commander()
+    # wifiComm = multiconnClientClass2.wifiCommunicator(sel, initialStateList)
+
+
+
+    def __init__(self):
 
         # Declare parameters
         self.lampON = 0
@@ -81,7 +86,14 @@ class smartUV:
         self.timeTheta = [320.25, -76.859, 444.6, -72.298]
         self.seeHuman = False   ## boolean to indicate whether human is detected
 
+        self.setup_GPIO()       # Setup GPIO
 
+        # Initialize utility classes with respective GPIO pins
+        #self.distanceSensor = Ultrasonic(GPIO_DIST0, GPIO_DIST1, GPIO_DIST2)
+        #self.motionSensor   = PIR(GPIO_PIR0, GPIO_PIR1, GPIO_PIR2)
+        #self.timer          = Timer()
+        ## Integration with Chris' code
+        #self.commander      = multiconnClientClass2.wifiCommunicator(sel, initialStateList)
     
     def main(self):
         """ Main function to loop through when system is not in IDLE state.
@@ -90,7 +102,9 @@ class smartUV:
         ## DETECT state
         while (self.state == DETECT):
             ## Checks if connected with the PyUI
-            connection = self.commander.Connected()
+            self.commander.start_connections(initialStateList)
+            # check2 : Check with Chris if code works like this (No return statement from module ??
+            connection = self.commander.checkWifi()
             if (connection):
                 self.state = IDLE
                 break
@@ -109,6 +123,7 @@ class smartUV:
             
             ### Common polling for INITIAL and ACTIVE
             ## Polls for OFF command
+            # check1: coordinate return value of getState (now getstate returns a list)
             command = self.commander.getState()
             ## Scans for moving object/human 
             self.seeHuman = self.motionSensor.getReadings()
@@ -133,7 +148,6 @@ class smartUV:
                 if (self.lampON==0):
                     self.lamp_turnOn()          ## Turn on lamp
                     self.warning_turnOn()       ## Turn on warning
-                    self.lampON = 1
                     self.timer.start()          ## Starts timer
                     self.commander.confirmState(self.lampON) ## Tells commander that light is turned on
 
@@ -144,6 +158,7 @@ class smartUV:
                         self.lamp_turnOff()     ## Turn off lamp
                         self.warning_turnOff()  ## Turn off warning 
                         self.timer.stop()       ## Turn off timer
+                        self.commander.confirmState(self.lampON) ## Tells commander that light is off (i.e. disinfection is complete)
 
             else:
                     ## Wrong state: outputs error (should not occur)
