@@ -1,15 +1,12 @@
 """ Main class for top level control.  
 """
 # Note:
-#   1.   All GPIO pins will follow BCM (Broadcom) convention instead of board convention. 
-#   2.  We need confirmState because we need to notify the pyUI when the disinfection is completed.
-#   3. Implementation details to check with Chris 
-#       - check1 : return value of wifiCommunicator.getState() [list or 1/0 ]?
-#       - check2:  usage of checkwifi and start_connections, attemptReconnection
-#       - Do I have to touch lightModuleClient??
+#   1.  All GPIO pins will follow BCM (Broadcom) convention instead of board convention. 
+#   2.  Note to hardware test: Current program cannot run. Still need to integrate in other program classes.                         
+#   3.  Note to self: Add in proxy functions to test state machine.
 #----------------------------------------------------------------------------     
 # Status:   in progress.
-# Last edit: Jordan Hong, 16:00 August 17, 2020 
+# Last edit: Jordan Hong, 17:10  October 12, 2020  (Updated for integration and refactoting. Todo: proxy functions and confirm with team)
 
 # Dependency###################################################
 ## Modules: ultrasonic, PIR, timer classes
@@ -20,15 +17,18 @@
 ## PIR 
 ##  - getReadings(): Returns the readings of the PIR sensor. (True/False)
 
-## Timer
-##  - start(): Starts the timer.
-##  - timeElapsed(): returns the time elapsed.
-##  - stop(): Stops the timer.
+## Timer: count down timer
+##  - set(time): Configures starting value for count down.
+##  - pause():   Pause timer, retains current remaining time.
+##  - reset():   Resets timer. This forces remaining time to be -1.
+##  - Timer.time: current remaining time
 
-## Commander
-##  - Connected():  returns if connected with PyUI (True/False)
-##  - getState():   returns the state that the commander asserts (1 for lamp on, 0 for lamp off)
-##  - confirmState(state): informs the commander of the current lamp state (1/0)
+
+##  wifi 
+##  - checkwifi():  Connect with PyUI to update internal memory. 
+##  - getState():   Returns list of current state [Connection, wifiState, wifiName, resetTimer]. resetTimer resets timer time to -1 (invalid) and shuts light off imediately.  
+##  - confirmState (self.state, self.context): Reports local state variable (ACTIVE or IDLE). Note that INITIAL will not be reported since the state is just intermediate and only effective in one cycle. 
+
 import RPi.GPIO as GPIO
 import controlLamp
 
@@ -37,10 +37,9 @@ class smartUV:
     # Declare constants 
 
     # State constants
-    DETECT  = 0
-    IDLE    = 1
+    IDLE    = 0
+    ACTIVE  = 1
     INITIAL = 2
-    ACTIVE  = 3
 
     # GPIO in BCM mode 
     ## Output
@@ -98,74 +97,21 @@ class smartUV:
     def main(self):
         """ Main function to loop through when system is not in IDLE state.
         """
-
-        ## DETECT state
-        while (self.state == DETECT):
-            ## Checks if connected with the PyUI
-            self.commander.start_connections(initialStateList)
-            # check2 : Check with Chris if code works like this (No return statement from module ??
-            connection = self.commander.checkWifi()
-            if (connection):
-                self.state = IDLE
-                break
-
-        ## IDLE state
-        while (self.state == IDLE):
-            ## Polls commander for ON command
-            command = self.commander.getState()
-            if (command==1):
-                # on receiving ON command to start the UV lamp,
-                # Change the state to IDLE
-                self.state = INITIAL 
-                break
-
-        while (self.state in (INITIAL, ACTIVE) ):
+        while True:
+            self.pre_cycle()    # Check connection and update information from PyUI
             
-            ### Common polling for INITIAL and ACTIVE
-            ## Polls for OFF command
-            # check1: coordinate return value of getState (now getstate returns a list)
-            command = self.commander.getState()
-            ## Scans for moving object/human 
-            self.seeHuman = self.motionSensor.getReadings()
-            ## If sees human or receives off command
-            if (self.seeHuman or (self.command==0)):
-                self.state = IDLE
-                break
+            if (self.state==IDLE):
+                self.state_IDLE()
+            elif (self.state==INITIAL):
+                self.state_INITIAL()
+            elif (self.state==ACTIVE):
+                self.state_ACTIVE()
 
-            ### Case statements
+            self.post_cycle()   # Confirms state and context with PyUI
 
-            ## INITIAL state
-            if (self.state==INITIAL):
-                ## Initial state, get distance readings and use it calculate UV time parameter
-                self.dist   = self.distanceSensor.getReadings()
-                self.onTime = controlLamp.distance_to_On_time(self.dist, self.timeTheta)
-                self.state = ACTIVE
-
-            ## ACTIVE state
-            if (self.state == ACTIVE):
-                ## Checks if light is on, 
-                ## if off (just transitioned from INITIAL to ACTIVE), turn on
-                if (self.lampON==0):
-                    self.lamp_turnOn()          ## Turn on lamp
-                    self.warning_turnOn()       ## Turn on warning
-                    self.timer.start()          ## Starts timer
-                    self.commander.confirmState(self.lampON) ## Tells commander that light is turned on
-
-                else:
-                    time_elapsed = self.timer.timeElapsed()
-                    if (time_elapsed >= self.onTime):
-                        ## Time is up
-                        self.lamp_turnOff()     ## Turn off lamp
-                        self.warning_turnOff()  ## Turn off warning 
-                        self.timer.stop()       ## Turn off timer
-                        self.commander.confirmState(self.lampON) ## Tells commander that light is off (i.e. disinfection is complete)
-
-            else:
-                    ## Wrong state: outputs error (should not occur)
-                    print("Wrong state")
-                    return False
-        return True
-
+        return 0
+    
+    #------------------- Raspberry PI GPIO Functions ----------------------------------#
     def setup_GPIO(self);
         """ Setup the GPIO pins that is interfaced directly here.
             Ignores the grove library pins, only set up GPIO pins for warnings and UV lamp power control
@@ -205,4 +151,109 @@ class smartUV:
         """
         GPIO.output(GPIO_warning, GPIO.LOW)
         return True
+
+    #------------------- State Machine Functions ----------------------------------#
+    def state_IDLE(self):
+    """
+    State when light is off.
+    """
+
+    if (self.lampON==1):
+        self.lamp_turnOff()      # Turns lamp off
+        self.warning_turnOff()   # Turns warning off
+        self.timer.pause()
+    return 0
+
+    def state_INITIAL(self):
+        """
+        Initial state prior to emitting UV.
+        Scans distance and compute disinfection time.
+        """
+        # Get distance 
+        self.dist   = self.distanceSensor.getReadings() 
+        # Calculate onTime
+        self.onTime = controlLamp.distance_to_On_time(self.dist, self.timeTheta)
+
+       
+        # Configure next state to ACTIVE
+        self.state = ACTIVE
+        # Set timer
+        self.timer.set(self.onTime)
+
+        # Detect human
+        self.seeHuman = self.motionSensor.getReadings()
+
+        return 0
+
+    def state_ACTIVE(self):
+        """
+        State when UV light emitting
+        """
         
+        # Detect human
+        self.seeHuman = self.motionSensor.getReadings()
+
+        # Turn on lamp if currently off
+        if (self.lampON==0):
+            self.lamp_turnOn()      # Turns lamp off
+            self.warning_turnOn()   # Turns warning off
+            self.timer.start()
+
+        else if (self.timer.time==0):
+            # Time up
+            self.state = IDLE       # Change next state, prepare to turn off next cycle
+            self.context = DUE 
+
+        if (self.seeHuman):
+            self.state = IDLE       # If human detect, go to IDLE
+            self.context = HUMAN
+
+        return 0
+
+    def pre_cycle(self):
+        """ 
+        Check WIFI and update from wifi.
+        """
+        Connection = False
+        wifiState  = 0
+        wifiName = "Test"
+        resetTimer = True
+
+        # Check connection
+        self.wifi.checkwifi() # This updates the internal memory
+
+        # Fetch updated data from checkwifi()
+        (Connection, wifiState, wifiName, resetTimer) = self.wifi.getState()
+        
+        if (wifiState==1):
+            if (self.lampON==0 and self.timer.time==-1):
+                # Lamp off and timer not set
+                state = INITIAL
+            else:
+                # Lamp off and timer was set:
+                # Resume disinfection
+                state = ACTIVE
+        else:
+            state = IDLE
+            if (self.lampON==1):
+                self.context = PAUSED   # Update context for off
+
+
+        if (resetTimer==True):
+            # Reset time should be effective whether lamp on (turn off, reset time), 
+            # or lamp off (simply reset time to -1)
+            state = IDLE
+            self.timer.reset()  # Resets timer time to -1
+
+
+    def post_cycle(self):
+        if (self.state==ACTIVE):
+            # Report time as context
+            self.context = self.timer.time
+        self.wifi.confirmState(self.state, self.context)
+        
+        return 0
+
+
+
+
