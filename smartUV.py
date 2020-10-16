@@ -79,7 +79,7 @@ class smartUV:
 
         # Declare parameters
         self.lampON = 0
-        self.state = INITIAL    ## state variable
+        self.state = DETECT    ## state variable
         self.dist = 0           ## distance in cm, measured from self.distanceSensor
         self.onTime = 0         ## Time calculated by optical parameters
         self.timeTheta = [320.25, -76.859, 444.6, -72.298]
@@ -158,11 +158,11 @@ class smartUV:
     State when light is off.
     """
 
-    if (self.lampON==1):
-        self.lamp_turnOff()      # Turns lamp off
-        self.warning_turnOff()   # Turns warning off
-        self.timer.pause()
-    return 0
+        if (self.lampON==1):
+            self.lamp_turnOff()      # Turns lamp off
+            self.warning_turnOff()   # Turns warning off
+            self.timer.pause()
+        return 0
 
     def state_INITIAL(self):
         """
@@ -224,26 +224,31 @@ class smartUV:
 
         # Fetch updated data from checkwifi()
         (Connection, wifiState, wifiName, resetTimer) = self.wifi.getState()
-        
-        if (wifiState==1):
-            if (self.lampON==0 and self.timer.time==-1):
-                # Lamp off and timer not set
-                state = INITIAL
+
+        if (Connection==True):
+            # Only change state when there is a connection
+            if (wifiState==1):
+                if (self.lampON==0 and self.timer.time==-1):
+                    # Lamp off and timer not set
+                    state = INITIAL
+                else:
+                    # Lamp off and timer was set:
+                    # Resume disinfection
+                    state = ACTIVE
             else:
-                # Lamp off and timer was set:
-                # Resume disinfection
-                state = ACTIVE
-        else:
-            state = IDLE
-            if (self.lampON==1):
-                self.context = PAUSED   # Update context for off
+                state = IDLE
+                if (self.lampON==1):
+                    self.context = PAUSED   # Update context for off
 
 
-        if (resetTimer==True):
-            # Reset time should be effective whether lamp on (turn off, reset time), 
-            # or lamp off (simply reset time to -1)
-            state = IDLE
-            self.timer.reset()  # Resets timer time to -1
+            if (resetTimer==True):
+                # Reset time should be effective whether lamp on (turn off, reset time), 
+                # or lamp off (simply reset time to -1)
+                state = IDLE
+                self.timer.reset()  # Resets timer time to -1
+
+
+        return 0
 
 
     def post_cycle(self):
