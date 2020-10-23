@@ -19,11 +19,12 @@
 ##  - getReadings(): Returns the readings of the PIR sensor. (True/False)
 
 ## Timer: count down timer
-##  - set(time):    Configures starting value for count down.
-##  - pause():      Pause timer, retains current remaining time.
-##  - reset():      Resets timer. This forces remaining time to be -1.
-##  - Timer.time:   Current remaining time (-1) at reset and initial, then counts down from set value)
-##  - Timer.TO:     Timeout flag. True when time=0. Reset to False. 
+##  - set(time):        Configures starting value for count down.
+##  - pause():          Pause timer, retains current remaining time.
+##  - reset():          Resets timer. This forces remaining time to be -1.
+##  - Timer.check():    Updates TO flag.
+##  - Timer.isSet():    Returns whether timer is set to a value. (Could return something like: not time==-1.
+##  - Timer.TO:         Timeout flag. True when time=0. Reset to False. 
 
 
 
