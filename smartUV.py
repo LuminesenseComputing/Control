@@ -11,6 +11,7 @@
 # Dependency###################################################
 ## Modules: ultrasonic, PIR, timer classes
 ## Assumed to have following methods from the above classes
+
 ## Ultrasonic
 ##  - getReadings(): Returns the readings of the ultrasonic sensor. (number in meters)
 
@@ -18,16 +19,13 @@
 ##  - getReadings(): Returns the readings of the PIR sensor. (True/False)
 
 ## Timer: count down timer
-##  - set(time): Configures starting value for count down.
-##  - pause():   Pause timer, retains current remaining time.
-##  - reset():   Resets timer. This forces remaining time to be -1.
-##  - Timer.time: current remaining time
+##  - set(time):    Configures starting value for count down.
+##  - pause():      Pause timer, retains current remaining time.
+##  - reset():      Resets timer. This forces remaining time to be -1.
+##  - Timer.time:   Current remaining time (-1) at reset and initial, then counts down from set value)
+##  - Timer.TO:     Timeout flag. True when time=0. Reset to False. 
 
 
-##  wifi 
-##  - checkwifi():  Connect with PyUI to update internal memory. 
-##  - getState():   Returns list of current state [Connection, wifiState, wifiName, resetTimer]. resetTimer resets timer time to -1 (invalid) and shuts light off imediately.  
-##  - confirmState (self.state, self.context): Reports local state variable (ACTIVE or IDLE). Note that INITIAL will not be reported since the state is just intermediate and only effective in one cycle. 
 
 import RPi.GPIO as GPIO
 import controlLamp
@@ -180,8 +178,6 @@ class smartUV:
         # Set timer
         self.timer.set(self.onTime)
 
-        # Detect human
-        self.seeHuman = self.motionSensor.getReadings()
 
         return 0
 
@@ -190,8 +186,6 @@ class smartUV:
         State when UV light emitting
         """
         
-        # Detect human
-        self.seeHuman = self.motionSensor.getReadings()
 
         # Turn on lamp if currently off
         if (self.lampON==0):
@@ -199,14 +193,10 @@ class smartUV:
             self.warning_turnOn()   # Turns warning off
             self.timer.start()
 
-        else if (self.timer.time==0):
+        else if (self.timer.TO):
             # Time up
             self.state = IDLE       # Change next state, prepare to turn off next cycle
-            self.context = DUE 
 
-        if (self.seeHuman):
-            self.state = IDLE       # If human detect, go to IDLE
-            self.context = HUMAN
 
         return 0
 
@@ -225,6 +215,11 @@ class smartUV:
         # Fetch updated data from checkwifi()
         (Connection, wifiState, wifiName, resetTimer) = self.wifi.getState()
 
+        # Detect human
+        self.seeHuman = self.motionSensor.getReadings()
+        if (self.seeHuman):
+            self.state = IDLE       # If human detect, go to IDLE
+
         if (Connection==True):
             # Only change state when there is a connection
             if (wifiState==1):
@@ -237,9 +232,6 @@ class smartUV:
                     state = ACTIVE
             else:
                 state = IDLE
-                if (self.lampON==1):
-                    self.context = PAUSED   # Update context for off
-
 
             if (resetTimer==True):
                 # Reset time should be effective whether lamp on (turn off, reset time), 
@@ -252,9 +244,20 @@ class smartUV:
 
 
     def post_cycle(self):
-        if (self.state==ACTIVE):
-            # Report time as context
-            self.context = self.timer.time
+        if (self.state==IDLE):
+            # If OFF 
+            self.context = IDLE
+            
+            if (self.timer.TO):
+                # Time out
+                self.context = TIMER
+
+                # clear timer
+                self.timer.clear()
+
+            else if self.seeHuman:
+                self.context = HUMAN
+            
         self.wifi.confirmState(self.state, self.context)
         
         return 0
