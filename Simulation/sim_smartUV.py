@@ -28,51 +28,34 @@
 
 
 
-import RPi.GPIO as GPIO
 import controlLamp
+from time_track_2 import *
+from Motion_Sensors_test import *
+from Ultrasonic_Test import *
 
 
-class smartUV:
-    # Declare constants 
+# State constants
+IDLE    = 0
+ACTIVE  = 1
+INITIAL = 2
+DETECT  = 3
+TIMER   = 4
+HUMAN   = 5
 
-    # State constants
-    IDLE    = 0
-    ACTIVE  = 1
-    INITIAL = 2
+# GPIO in BCM mode 
+## Output
+GPIO_warning    = 6 
+GPIO_lamp       = 26 
+## Input
+GPIO_PIR0       = 9 
+GPIO_PIR1       = 11 
+GPIO_PIR2       = 5
 
-    # GPIO in BCM mode 
-    ## Output
-    GPIO_warning    = 6 
-    GPIO_lamp       = 26 
-    ## Input
-    GPIO_PIR0       = 9 
-    GPIO_PIR1       = 11 
-    GPIO_PIR2       = 5
+GPIO_DIST0      = 13
+GPIO_DIST1      = 19
+GPIO_DIST2      = 12
 
-    GPIO_DIST0      = 13
-    GPIO_DIST1      = 19
-    GPIO_DIST2      = 12
-
-
-    ## GPIO in board mode 
-    ### Output
-    #GPIO_warning    = 31
-    #GPIO_lamp       = 37
-    ### Input
-    #GPIO_PIR0       = 21
-    #GPIO_PIR1       = 23
-    #GPIO_PIR2       = 29
-
-    #GPIO_DIST0      = 33
-    #GPIO_DIST1      = 35
-    #GPIO_DIST2      = 32
-
-
-    initialStateList = [["OFF", "lightName", 0]]
-
-    # wifiComm = multiconnClientClass2.wifiCommunicator(sel, initialStateList)
-
-
+class sim_smartUV:
 
     def __init__(self):
 
@@ -87,16 +70,16 @@ class smartUV:
         self.setup_GPIO()       # Setup GPIO
 
         # Initialize utility classes with respective GPIO pins
-        #self.distanceSensor = Ultrasonic(GPIO_DIST0, GPIO_DIST1, GPIO_DIST2)
-        #self.motionSensor   = PIR(GPIO_PIR0, GPIO_PIR1, GPIO_PIR2)
-        #self.timer          = Timer()
-        ## Integration with Chris' code
-        #self.commander      = multiconnClientClass2.wifiCommunicator(sel, initialStateList)
+        self.distanceSensor = Ultrasonic_sim(GPIO_DIST0, GPIO_DIST1, GPIO_DIST2)
+        self.motionSensor   = PIR_sim(GPIO_PIR0, GPIO_PIR1, GPIO_PIR2)
+        self.timer          = TimeTrack()
+        self.context        = IDLE
     
     def main(self):
         """ Main function to loop through when system is not in IDLE state.
         """
         while True:
+            # self.sim_input()
             self.pre_cycle()    # Check connection and update information from PyUI
             
             if (self.state==IDLE):
@@ -107,55 +90,63 @@ class smartUV:
                 self.state_ACTIVE()
 
             self.post_cycle()   # Confirms state and context with PyUI
+            self.print_state()
+            time.sleep(1)
 
         return 0
     
     #------------------- Raspberry PI GPIO Functions ----------------------------------#
-    def setup_GPIO(self);
+    def setup_GPIO(self):
         """ Setup the GPIO pins that is interfaced directly here.
             Ignores the grove library pins, only set up GPIO pins for warnings and UV lamp power control
         """
        
-        # Set board pin numbering system as BCM  
-        GPIO.setmode(GPIO.BCM)
+        ### Set board pin numbering system as BCM  
+        ##GPIO.setmode(GPIO.BCM)
 
-        # Set pin mode for warning and lamps as write
-        GPIO.setup(GPIO_warning, GPIO.out)
-        GPIO.setup(GPIO_lamp, GPIO.out)
+        ### Set pin mode for warning and lamps as write
+        ##GPIO.setup(GPIO_warning, GPIO.out)
+        ##GPIO.setup(GPIO_lamp, GPIO.out)
+
+        print ("Setting up GPIO")
 
         return True
 
-    def lamp_turnOn(self);
+    def lamp_turnOn(self):
         """ Turns lamp on 
         """
-        GPIO.output(GPIO_lamp, GPIO.HIGH)
+        # GPIO.output(GPIO_lamp, GPIO.HIGH)
+        print ("Turning lamp ON")
         self.lampON = 1
         return True
 
     def lamp_turnOff(self):
         """ Turns lamp off
         """
-        GPIO.output(GPIO_lamp, GPIO.LOW)
+        # GPIO.output(GPIO_lamp, GPIO.LOW)
+        print ("Turning lamp off")
         self.lampON = 0
         return True
         
     def warning_turnOn(self):
         """ Turns warning on
         """
-        GPIO.output(GPIO_warning, GPIO.HIGH)
+        # GPIO.output(GPIO_warning, GPIO.HIGH)
+        print ("Turning warning light on")
         return True
     
     def warning_turnOff(self):
         """ Turns warning off
         """
-        GPIO.output(GPIO_warning, GPIO.LOW)
+        # GPIO.output(GPIO_warning, GPIO.LOW)
+        print ("Turning warning light off")
         return True
 
     #------------------- State Machine Functions ----------------------------------#
     def state_IDLE(self):
-    """
-    State when light is off.
-    """
+        """
+        State when light is off.
+        """
 
         if (self.lampON==1):
             self.lamp_turnOff()      # Turns lamp off
@@ -177,6 +168,7 @@ class smartUV:
         # Configure next state to ACTIVE
         self.state = ACTIVE
         # Set timer
+        self.onTime=5 #TODO: remove this, just for simulation
         self.timer.setPeriod(self.onTime)
 
 
@@ -186,18 +178,21 @@ class smartUV:
         """
         State when UV light emitting
         """
-        
+        # check timer 
+        self.timer.check()
 
         # Turn on lamp if currently off
         if (self.lampON==0):
             self.lamp_turnOn()      # Turns lamp off
             self.warning_turnOn()   # Turns warning off
             self.timer.startTimer()
+            self.context = ACTIVE
 
-        else if (self.timer.TO):
+        elif (self.timer.TO):
             # Time up
-            self.state = IDLE       # Change next state, prepare to turn off next cycle
-
+            print ("Time is up!")
+            self.state = IDLE     
+            self.state_IDLE()
 
         return 0
 
@@ -205,16 +200,22 @@ class smartUV:
         """ 
         Check WIFI and update from wifi.
         """
-        Connection = False
-        wifiState  = 0
+        # Connection = False 
+        # wifiState  = 0
+        # resetTimer = True
+        
+        #---------- Simulation only ----------------#
+        Connection = True 
+        wifiState  = 1
         wifiName = "Test"
-        resetTimer = True
+        resetTimer = False
+        #-------------------------------------------#
 
         # Check connection
-        self.wifi.checkwifi() # This updates the internal memory
+        # self.wifi.checkwifi() # This updates the internal memory
 
         # Fetch updated data from checkwifi()
-        (Connection, wifiState, wifiName, resetTimer) = self.wifi.getState()
+        # (Connection, wifiState, wifiName, resetTimer) = self.wifi.getState()
 
         # Detect human
         self.seeHuman = self.motionSensor.getReadings()
@@ -224,20 +225,21 @@ class smartUV:
         if (Connection==True):
             # Only change state when there is a connection
             if (wifiState==1):
+                print ("Connection true, lampON: ", self.lampON)
                 if (self.lampON==0 and self.timer.period==-1):
                     # Lamp off and timer not set
-                    state = INITIAL
+                    self.state = INITIAL
                 else:
                     # Lamp off and timer was set:
                     # Resume disinfection
-                    state = ACTIVE
+                    self.state = ACTIVE
             else:
-                state = IDLE
+                self.state = IDLE
 
             if (resetTimer==True):
                 # Reset time should be effective whether lamp on (turn off, reset time), 
                 # or lamp off (simply reset time to -1)
-                state = IDLE
+                self.state = IDLE
                 self.timer.reset()  # Resets timer time to -1
 
 
@@ -247,6 +249,7 @@ class smartUV:
     def post_cycle(self):
         if (self.state==IDLE):
             # If OFF 
+            print ("Here!")
             self.context = IDLE
             
             if (self.timer.TO):
@@ -254,19 +257,29 @@ class smartUV:
                 self.context = TIMER
 
                 # clear timer
-                self.timer.clear()
+                print ("I'm resetting")
+                self.timer.reset()
 
-            else if self.seeHuman:
+            elif self.seeHuman:
                 self.context = HUMAN
             
-        self.wifi.confirmState(self.state, self.context)
+        # self.wifi.confirmState(self.state, self.context)
         
         return 0
 
 
     #------------------- Simlulation only----------------------------------------#
-    def print_state():
+    def sim_input(self):
+        self.motionSensor.getInput()
+
+    def print_state(self):
         # Print the state of UV lamp
-        print (self.state, self.context)
+        state_map = ["IDLE", "ACTIVE",  "INITIAL", "DETECT", "TIMER", "HUMAN"]
+        if not (self.context==IDLE):
+            print (state_map[self.state], state_map[self.context])
 
 
+
+if __name__ == "__main__":
+    mySmartUV = sim_smartUV()
+    mySmartUV.main()
