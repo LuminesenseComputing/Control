@@ -27,7 +27,7 @@
 ##  - Timer.TO:         Timeout flag. True when time=0. Reset to False. 
 
 
-
+import RPi.GPIO as GPIO
 import controlLamp
 from time_track_2 import *
 from motion_sensor_3 import *
