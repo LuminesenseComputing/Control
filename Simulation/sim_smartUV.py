@@ -200,15 +200,29 @@ class sim_smartUV:
         """ 
         Check WIFI and update from wifi.
         """
+        if (self.state==DETECT):
+            print ("Connected")
+            self.state=IDLE
+
+        if (self.state==IDLE):
+            wifistate = int (input("State IDLE, turn on? [1/0]?"))
+            if (wifistate==1):
+                self.state = INITIAL
+
+        # Detect human
+        self.seeHuman = self.motionSensor.getReadings()
+        if (self.seeHuman):
+            self.state = IDLE       # If human detect, go to IDLE
+
         # Connection = False 
         # wifiState  = 0
         # resetTimer = True
         
         #---------- Simulation only ----------------#
-        Connection = True 
-        wifiState  = 1
-        wifiName = "Test"
-        resetTimer = False
+        #Connection = True 
+        #wifiState  = 1
+        #wifiName = "Test"
+        #resetTimer = False
         #-------------------------------------------#
 
         # Check connection
@@ -217,30 +231,25 @@ class sim_smartUV:
         # Fetch updated data from checkwifi()
         # (Connection, wifiState, wifiName, resetTimer) = self.wifi.getState()
 
-        # Detect human
-        self.seeHuman = self.motionSensor.getReadings()
-        if (self.seeHuman):
-            self.state = IDLE       # If human detect, go to IDLE
+        #if (Connection==True):
+        #    # Only change state when there is a connection
+        #    if (wifiState==1):
+        #        print ("Connection true, lampON: ", self.lampON)
+        #        if (self.lampON==0 and self.timer.period==-1):
+        #            # Lamp off and timer not set
+        #            self.state = INITIAL
+        #        else:
+        #            # Lamp off and timer was set:
+        #            # Resume disinfection
+        #            self.state = ACTIVE
+        #    else:
+        #        self.state = IDLE
 
-        if (Connection==True):
-            # Only change state when there is a connection
-            if (wifiState==1):
-                print ("Connection true, lampON: ", self.lampON)
-                if (self.lampON==0 and self.timer.period==-1):
-                    # Lamp off and timer not set
-                    self.state = INITIAL
-                else:
-                    # Lamp off and timer was set:
-                    # Resume disinfection
-                    self.state = ACTIVE
-            else:
-                self.state = IDLE
-
-            if (resetTimer==True):
-                # Reset time should be effective whether lamp on (turn off, reset time), 
-                # or lamp off (simply reset time to -1)
-                self.state = IDLE
-                self.timer.reset()  # Resets timer time to -1
+        #    if (resetTimer==True):
+        #        # Reset time should be effective whether lamp on (turn off, reset time), 
+        #        # or lamp off (simply reset time to -1)
+        #        self.state = IDLE
+        #        self.timer.reset()  # Resets timer time to -1
 
 
         return 0
@@ -249,7 +258,6 @@ class sim_smartUV:
     def post_cycle(self):
         if (self.state==IDLE):
             # If OFF 
-            print ("Here!")
             self.context = IDLE
             
             if (self.timer.TO):
@@ -257,7 +265,7 @@ class sim_smartUV:
                 self.context = TIMER
 
                 # clear timer
-                print ("I'm resetting")
+                print ("Timer resetting")
                 self.timer.reset()
 
             elif self.seeHuman:
@@ -275,8 +283,8 @@ class sim_smartUV:
     def print_state(self):
         # Print the state of UV lamp
         state_map = ["IDLE", "ACTIVE",  "INITIAL", "DETECT", "TIMER", "HUMAN"]
-        if not (self.context==IDLE):
-            print (state_map[self.state], state_map[self.context])
+        #if not (self.context==IDLE):
+        print (state_map[self.state], state_map[self.context])
 
 
 
