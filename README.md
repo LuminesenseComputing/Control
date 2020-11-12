@@ -8,4 +8,4 @@ Repository for system control with the raspberry pi.
 
 # How to call the program
 - For `Simulation/`, run:  `python3 sim_smartUV.py`. 
-- For `Test1/`, run: `test1_smartUV.py`
+- For `Test1/`, run: `python3 test1_smartUV.py`
