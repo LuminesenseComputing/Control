@@ -275,6 +275,7 @@ class sim_smartUV:
                 self.state = IDLE
                 self.timer.reset()  # Resets timer time to -1
         else:
+            self.state = IDLE
             print("Not connected to base station.")
 
         # Detect human
