@@ -6,7 +6,7 @@
 #   Todo: Chris- review changes.
 #----------------------------------------------------------------------------     
 # Status:   in progress.
-# Last edit: Jordan Hong, 17:10  December 06, 2020 (Modifed for MVP)  
+# Last edit: Chris, 1:50  December 10, 2020 (Fixed some minor bugs preventing compilation)  
 
 # Dependency###################################################
 ## Modules: ultrasonic, PIR, timer classes
@@ -91,8 +91,8 @@ class sim_smartUV:
         self.setup_GPIO()       # Setup GPIO
 
         # Initialize utility classes with respective GPIO pins
-        self.distanceSensor = Ultrasonic(GPIO_DIST0, GPIO_DIST1, GPIO_DIST2)
-        self.motionSensor   = PIR(GPIO_PIR0, GPIO_PIR1, GPIO_PIR2)
+        self.distanceSensor = Ultrasonic_sim(GPIO_DIST0, GPIO_DIST1, GPIO_DIST2)
+        self.motionSensor   = PIR_sim(GPIO_PIR0, GPIO_PIR1, GPIO_PIR2)
         self.timer          = TimeTrack()
         self.context        = IDLE
     
@@ -125,8 +125,8 @@ class sim_smartUV:
         GPIO.setmode(GPIO.BCM)
 
         # Set pin mode for warning and lamps as write
-        GPIO.setup(GPIO_warning, GPIO.out)
-        GPIO.setup(GPIO_lamp, GPIO.out)
+        GPIO.setup(GPIO_warning, GPIO.OUT)
+        GPIO.setup(GPIO_lamp, GPIO.OUT)
 
         print ("Setting up GPIO")
 
